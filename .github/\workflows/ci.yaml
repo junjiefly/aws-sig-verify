@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: ["1.22", "1.24", "1.25"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Unformatted files:"
+            echo "$unformatted"
+            exit 1
+          fi
+      - run: go test -race ./...
+      - run: go vet ./...
+      - name: Fuzz smoke test
+        if: matrix.go == '1.25'
+        run: |
+          go test -fuzz=FuzzChunkedReader -fuzztime=30s -run xxx ./...
+          go test -fuzz=FuzzTrailerBlock -fuzztime=30s -run xxx ./...
+      - name: Coverage
+        if: matrix.go == '1.25'
+        run: go test -coverprofile=coverage.out ./... && go tool cover -func coverage.out | tail -1
+      - name: Interoperability suite (independent AWS client signers)
+        if: matrix.go != '1.22'
+        working-directory: interop
+        run: go test -race ./...
