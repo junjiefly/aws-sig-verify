@@ -67,26 +67,11 @@ func ParsePostPolicy(encodedPolicy string) (*PostPolicy, error) {
 }
 
 func (v *Verifier) VerifyPostPolicy(form url.Values, options VerifyOptions) (*Result, error) {
-	if form == nil {
-		return nil, ErrPostPolicyRequired
-	}
-	policy := form.Get("policy")
-	if policy == "" {
-		return nil, ErrPostPolicyRequired
-	}
-	// The signature covers one document. A form carrying two of them would let
-	// the verifier and the application disagree about which was signed.
-	if len(form["policy"]) != 1 {
-		return nil, fmt.Errorf("%w: %d policy fields in one form", ErrMalformedPostPolicy, len(form["policy"]))
-	}
-	parsedPolicy, err := ParsePostPolicy(policy)
+	_, policyDocument, err := v.verifyPostPolicySignature(form, options)
 	if err != nil {
 		return nil, err
 	}
-	if v.clock().After(parsedPolicy.Expiration) {
-		return nil, ErrExpiredSignature
-	}
-
+	policy := form.Get("policy")
 	var result *Result
 	if form.Get("x-amz-algorithm") != "" || form.Has("x-amz-credential") {
 		for _, name := range []string{"x-amz-algorithm", "x-amz-credential", "x-amz-signature", "x-amz-date", "x-amz-security-token"} {
@@ -94,7 +79,7 @@ func (v *Verifier) VerifyPostPolicy(form url.Values, options VerifyOptions) (*Re
 				return nil, fmt.Errorf("%w: %s field was repeated", ErrMalformedAuthorization, name)
 			}
 		}
-		result, err = v.verifyV4PostPolicy(form, options, policy, parsedPolicy)
+		result, err = v.verifyV4PostPolicy(form, options, policy, policyDocument)
 	} else {
 		for _, name := range []string{"AWSAccessKeyId", "Signature", "signature", "x-amz-security-token"} {
 			if len(form[name]) > 1 {
@@ -104,17 +89,68 @@ func (v *Verifier) VerifyPostPolicy(form url.Values, options VerifyOptions) (*Re
 		if len(form["Signature"])+len(form["signature"]) > 1 {
 			return nil, fmt.Errorf("%w: Signature field was repeated", ErrMalformedAuthorization)
 		}
-		result, err = v.verifyV2PostPolicy(form, options, policy, parsedPolicy)
+		result, err = v.verifyV2PostPolicy(form, options, policy, policyDocument)
 	}
 	if err != nil {
 		return nil, err
 	}
 	// The conditions are only worth checking once the document they belong to is
 	// authenticated: the signature proves the credential holder agreed to them.
-	if err := checkPostPolicyConditions(form, parsedPolicy.Conditions, options); err != nil {
+	if err := checkPostPolicyConditions(form, policyDocument.Conditions, options); err != nil {
 		return nil, err
 	}
 	return result, nil
+}
+
+// VerifyPostPolicySignature authenticates the signed policy document and its
+// expiration, but does not check policy conditions. Use this when a condition
+// such as content-length-range can only be evaluated while the upload body is
+// streamed; the caller remains responsible for checking every condition.
+func (v *Verifier) VerifyPostPolicySignature(form url.Values, options VerifyOptions) (*Result, error) {
+	result, _, err := v.verifyPostPolicySignature(form, options)
+	return result, err
+}
+
+func (v *Verifier) verifyPostPolicySignature(form url.Values, options VerifyOptions) (*Result, *PostPolicy, error) {
+	if form == nil {
+		return nil, nil, ErrPostPolicyRequired
+	}
+	if form.Get("policy") == "" {
+		return nil, nil, ErrPostPolicyRequired
+	}
+	if len(form["policy"]) != 1 {
+		return nil, nil, fmt.Errorf("%w: %d policy fields in one form", ErrMalformedPostPolicy, len(form["policy"]))
+	}
+	if form.Get("x-amz-algorithm") != "" || form.Has("x-amz-credential") {
+		for _, name := range []string{"x-amz-algorithm", "x-amz-credential", "x-amz-signature", "x-amz-date", "x-amz-security-token"} {
+			if len(form[name]) > 1 {
+				return nil, nil, fmt.Errorf("%w: %s field was repeated", ErrMalformedAuthorization, name)
+			}
+		}
+	} else {
+		for _, name := range []string{"AWSAccessKeyId", "Signature", "signature", "x-amz-security-token"} {
+			if len(form[name]) > 1 {
+				return nil, nil, fmt.Errorf("%w: %s field was repeated", ErrMalformedAuthorization, name)
+			}
+		}
+		if len(form["Signature"])+len(form["signature"]) > 1 {
+			return nil, nil, fmt.Errorf("%w: Signature field was repeated", ErrMalformedAuthorization)
+		}
+	}
+	encodedPolicy := form.Get("policy")
+	parsedPolicy, err := ParsePostPolicy(encodedPolicy)
+	if err != nil {
+		return nil, nil, err
+	}
+	if v.clock().After(parsedPolicy.Expiration) {
+		return nil, nil, ErrExpiredSignature
+	}
+	if form.Get("x-amz-algorithm") != "" || form.Has("x-amz-credential") {
+		result, err := v.verifyV4PostPolicy(form, options, encodedPolicy, parsedPolicy)
+		return result, parsedPolicy, err
+	}
+	result, err := v.verifyV2PostPolicy(form, options, encodedPolicy, parsedPolicy)
+	return result, parsedPolicy, err
 }
 
 func (v *Verifier) verifyV4PostPolicy(form url.Values, options VerifyOptions, encodedPolicy string, policy *PostPolicy) (*Result, error) {

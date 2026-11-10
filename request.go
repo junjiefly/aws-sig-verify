@@ -110,6 +110,10 @@ func RequestBucketFromHost(host string, domains []string) string {
 	}
 	matched := ""
 	for _, domain := range domains {
+		trimmedDomain := strings.ToLower(strings.Trim(domain, "."))
+		if hostname == trimmedDomain {
+			return ""
+		}
 		suffix := "." + strings.ToLower(strings.Trim(domain, "."))
 		if suffix == "." {
 			continue
