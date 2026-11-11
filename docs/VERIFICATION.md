@@ -309,6 +309,10 @@ non-whitelisted parameters such as `list-type` and `x-id` out of the resource.
 `?retention` URL end to end, so the rule is exercised through `Verify` and not
 only through the resource builder.
 
+`TestVerifyV2CanonicalResourceAWSSubresources` additionally pins current AWS
+S3 operation subresources and the legacy botocore names listed above, while
+`TestVerifyV2SubresourcesAreSorted` keeps the canonical ordering deterministic.
+
 ### 7. Fuzzing the streaming parser (`chunked_fuzz_test.go`)
 
 `FuzzChunkedReader` feeds arbitrary bytes to the chunk framer behind a valid

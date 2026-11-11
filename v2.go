@@ -27,22 +27,41 @@ import (
 )
 
 // v2Subresources is the query parameters whitelist used in the canonical
-// resource. It is the union of the AWS S3 subresources and the list MinIO
-// signs (cmd/signature-v2.go resourceList), kept in ASCII order: a client that
+// resource. It is the union of the AWS S3 operation subresources, the legacy
+// botocore SigV2 query list, and the list MinIO signs
+// (cmd/signature-v2.go resourceList), kept in ASCII order: a client that
 // signs a subresource missing here produces a signature that can never match.
 var v2Subresources = []string{
+	"abac",
+	"accelerate",
 	"acl",
+	"analytics",
+	"annotation",
+	"attributes",
 	"cors",
-	"defaultObjectLockConfiguration",
+	"defaultObjectAcl",
 	"delete",
 	"encryption",
+	"intelligent-tiering",
+	"inventory",
 	"legal-hold",
 	"lifecycle",
 	"location",
 	"logging",
+	"metadataAnnotationTable",
+	"metadataConfiguration",
+	"metadataInventoryTable",
+	"metadataJournalTable",
+	"metadataTable",
+	"metrics",
 	"notification",
+	"object-lock",
+	"ownershipControls",
 	"partNumber",
 	"policy",
+	"policyStatus",
+	"publicAccessBlock",
+	"renameObject",
 	"replication",
 	"requestPayment",
 	"response-cache-control",
@@ -55,6 +74,8 @@ var v2Subresources = []string{
 	"retention",
 	"select",
 	"select-type",
+	"session",
+	"storageClass",
 	"tagging",
 	"torrent",
 	"uploadId",

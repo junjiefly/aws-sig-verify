@@ -307,9 +307,13 @@ removed and duplicate slashes merged, which is what the AWS test-suite vector
 
 SigV2 puts the escaped request path, not the decoded one, into the canonicalized
 resource, following the "HTTP-Request-URI up to the query string" rule. The
-subresource whitelist is the union of the AWS subresources and the list MinIO
-signs, so `?retention`, `?legal-hold`, `?encryption`, `?select` and
-`?select-type` are part of the canonical resource exactly as they are there.
+subresource whitelist is the union of the AWS S3 subresources, the legacy
+botocore SigV2 query list, and the list MinIO signs. Therefore `?object-lock`,
+`?abac`, `?annotation`, `?metadataTable`, `?renameObject`, `?policyStatus`,
+`?publicAccessBlock`, `?ownershipControls`, `?attributes`, `?session`,
+`?retention`, `?legal-hold`, `?encryption`, `?select` and `?select-type` are
+part of the canonical resource exactly as the corresponding AWS operation
+models and client implementations expect.
 
 A presigned SigV4 request must carry all six parameters MinIO treats as
 mandatory: `X-Amz-Algorithm`, `X-Amz-Credential`, `X-Amz-Date`,

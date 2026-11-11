@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
@@ -242,6 +243,7 @@ func TestVerifyV2CanonicalResourceMinIOSubresources(t *testing.T) {
 	}{
 		{"?retention", "/bucket/file.txt?retention"},
 		{"?legal-hold", "/bucket/file.txt?legal-hold"},
+		{"?object-lock", "/bucket/file.txt?object-lock"},
 		{"?encryption", "/bucket/file.txt?encryption"},
 		{"?select", "/bucket/file.txt?select"},
 		{"?select-type=2", "/bucket/file.txt?select-type=2"},
@@ -258,6 +260,57 @@ func TestVerifyV2CanonicalResourceMinIOSubresources(t *testing.T) {
 		if got := v2CanonicalResource(req, ""); got != testCase.want {
 			t.Errorf("%s -> canonical resource %q, want %q", testCase.query, got, testCase.want)
 		}
+	}
+}
+
+func TestVerifyV2CanonicalResourceAWSSubresources(t *testing.T) {
+	// These names appear as S3 subresources in the AWS S3 operation models
+	// or as legacy V2 query parameters signed by botocore. Keeping every one
+	// prevents a correctly signed request from failing before JOSS can return
+	// 501 NotImplemented for an unsupported operation.
+	for _, subresource := range []string{
+		"abac",
+		"accelerate",
+		"analytics",
+		"annotation",
+		"attributes",
+		"defaultObjectAcl",
+		"encryption",
+		"intelligent-tiering",
+		"inventory",
+		"legal-hold",
+		"metadataAnnotationTable",
+		"metadataConfiguration",
+		"metadataInventoryTable",
+		"metadataJournalTable",
+		"metadataTable",
+		"metrics",
+		"object-lock",
+		"ownershipControls",
+		"policyStatus",
+		"publicAccessBlock",
+		"renameObject",
+		"retention",
+		"session",
+		"storageClass",
+	} {
+		req, err := http.NewRequest(http.MethodGet, "https://s3.example.com/bucket/file.txt?"+subresource, nil)
+		if err != nil {
+			t.Fatalf("building %q: %v", subresource, err)
+		}
+		want := "/bucket/file.txt?" + subresource
+		if got := v2CanonicalResource(req, ""); got != want {
+			t.Errorf("%s -> canonical resource %q, want %q", subresource, got, want)
+		}
+	}
+}
+
+func TestVerifyV2SubresourcesAreSorted(t *testing.T) {
+	for index, name := range v2Subresources {
+		if index == 0 || strings.Compare(v2Subresources[index-1], name) < 0 {
+			continue
+		}
+		t.Fatalf("v2Subresources is not ASCII sorted at %q: %q <= %q", name, name, v2Subresources[index-1])
 	}
 }
 
