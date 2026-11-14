@@ -83,6 +83,17 @@ type VerifyOptions struct {
 	// a condition is rejected with ErrUnsupportedPostPolicyCondition when this
 	// is nil, never silently accepted.
 	PostPolicyContentLength *int64
+
+	// PostPolicyUnconditionedFields names form fields that a caller permits
+	// without a matching policy condition. Names are compared without case.
+	// This is intended for implementation-specific checksum or encryption
+	// fields; leave it empty for strict AWS S3 POST policy behavior.
+	PostPolicyUnconditionedFields []string
+
+	// PostPolicyStrictFields enables AWS S3's rule that every applicable form
+	// field must be constrained by the signed POST policy. The legacy
+	// VerifyPostPolicy behavior remains unchanged when this is false.
+	PostPolicyStrictFields bool
 }
 
 type Result struct {

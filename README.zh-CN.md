@@ -196,6 +196,17 @@ policy 文档必须携带 `expiration`。文档签名验证通过后，其中的
 调用者没有提供大小，包会失败关闭，而不是跳过检查。遇到本包未实现的操作符
 时，会返回 `ErrUnsupportedPostPolicyCondition`，不会静默放行。
 
+如果调用者需要先验证签名，再流式处理文件内容，可以使用
+`ParsePostPolicyDocument` 解码 policy，用 `PostPolicy.ContentLengthRange`
+读取上传大小限制，最后用 `PostPolicy.CheckConditions` 应用已签名的 condition。
+
+设置 `PostPolicyStrictFields` 后，除了标准 POST 例外字段和 `x-ignore-*`
+字段外，其他表单字段都必须被已签名 policy 约束，符合 AWS S3 的 POST 规则。
+网关自己消费的少量实现专用字段可通过 `PostPolicyUnconditionedFields` 显式
+放行；违反规则时返回 `ErrFormFieldNotInPolicy`。签名凭据字段按签名版本区分：
+SigV4 只豁免 `x-amz-signature`，SigV2 还会豁免 `AWSAccessKeyId` 和
+`Signature`。
+
 签名验证和 condition 检查并不意味着上传已被授权。key 前缀、存储类别、ACL，
 以及 policy 没有表达的任何应用层限制，仍然由应用程序决定。
 
@@ -215,6 +226,7 @@ Sentinel error 在 `errors.go` 中导出，包括：
 - `ErrMalformedPostPolicy`
 - `ErrPostPolicyConditionFailed`
 - `ErrUnsupportedPostPolicyCondition`
+- `ErrFormFieldNotInPolicy`
 
 请使用 `errors.Is(err, awsverify.ErrSignatureMismatch)`，不要匹配错误字符串。
 

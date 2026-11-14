@@ -42,6 +42,7 @@ var (
 	ErrChunkSizeTooLarge              = errors.New("awsverify: chunk size too large")
 	ErrPostPolicyRequired             = errors.New("awsverify: post policy is required")
 	ErrMalformedPostPolicy            = errors.New("awsverify: malformed post policy document")
+	ErrFormFieldNotInPolicy           = errors.New("awsverify: form field not specified in post policy")
 	ErrPostPolicyConditionFailed      = errors.New("awsverify: post policy condition failed")
 	ErrUnsupportedPostPolicyCondition = errors.New("awsverify: unsupported post policy condition")
 	ErrUnsupportedPostPolicyVersion   = errors.New("awsverify: unsupported post policy signature version")

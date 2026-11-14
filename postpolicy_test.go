@@ -209,6 +209,12 @@ func TestVerifyPostPolicyConditions(t *testing.T) {
 			want:   ErrMalformedPostPolicy,
 		},
 		{
+			name:   "array field without the dollar prefix is refused",
+			policy: `{"expiration":"2026-01-01T00:01:00Z","conditions":[["eq","key","photo.png"]]}`,
+			fields: map[string]string{"key": "photo.png"},
+			want:   ErrMalformedPostPolicy,
+		},
+		{
 			name:   "signing an empty condition list is allowed",
 			policy: `{"expiration":"2026-01-01T00:01:00Z","conditions":[]}`,
 			fields: map[string]string{"key": "photo.png"},
@@ -243,6 +249,26 @@ func TestVerifyPostPolicyConditions(t *testing.T) {
 				t.Fatalf("error = %v, want %v", err, test.want)
 			}
 		})
+	}
+}
+
+func TestPostPolicyCheckConditionsSkipsSeparateLengthRange(t *testing.T) {
+	policy, err := ParsePostPolicyDocument([]byte(
+		`{"expiration":"2026-01-01T00:01:00Z","conditions":[["content-length-range",100,1024],{"key":"photo.png"}]}`,
+	))
+	if err != nil {
+		t.Fatalf("ParsePostPolicyDocument() error = %v", err)
+	}
+	lengthRange, err := policy.ContentLengthRange()
+	if err != nil {
+		t.Fatalf("ContentLengthRange() error = %v", err)
+	}
+	if !lengthRange.Valid || lengthRange.Min != 100 || lengthRange.Max != 1024 {
+		t.Fatalf("unexpected content length range: %+v", lengthRange)
+	}
+	form := url.Values{"key": {"photo.png"}}
+	if err := policy.CheckConditions(form, VerifyOptions{}); err != nil {
+		t.Fatalf("CheckConditions() error = %v, want nil", err)
 	}
 }
 

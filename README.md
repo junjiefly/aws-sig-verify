@@ -211,6 +211,19 @@ while the caller supplies no size fails closed instead of skipping the check.
 An operator this package does not implement returns
 `ErrUnsupportedPostPolicyCondition` rather than passing silently.
 
+For callers that stream the file after signature verification, decode the
+policy with `ParsePostPolicyDocument`, evaluate `content-length-range` with
+`PostPolicy.ContentLengthRange`, and later apply the signed conditions with
+`PostPolicy.CheckConditions`.
+
+Set `PostPolicyStrictFields` to enforce AWS S3's rule that form fields other
+than the standard POST exceptions and `x-ignore-*` fields must be constrained
+by the signed policy. `PostPolicyUnconditionedFields` can explicitly allow the
+small number of implementation-specific fields that your gateway consumes. A
+violating field returns `ErrFormFieldNotInPolicy`. Signature credential fields
+are version-specific: SigV4 exempts only `x-amz-signature`, while SigV2 also
+exempts `AWSAccessKeyId` and `Signature`.
+
 Signature verification and condition checks do not mean the upload is
 authorized. Key prefix, storage class, ACL and any application-specific
 constraint that the policy does not express remain the application's decision.
@@ -231,6 +244,7 @@ Sentinel errors are exported in `errors.go`, including:
 - `ErrMalformedPostPolicy`
 - `ErrPostPolicyConditionFailed`
 - `ErrUnsupportedPostPolicyCondition`
+- `ErrFormFieldNotInPolicy`
 
 Use `errors.Is(err, awsverify.ErrSignatureMismatch)` rather than matching error
 strings.
