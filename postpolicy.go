@@ -139,10 +139,10 @@ func (policy *PostPolicy) CheckConditions(form url.Values, options VerifyOptions
 	if policy == nil {
 		return ErrMalformedPostPolicy
 	}
-	if err := enforcePostPolicyFields(form, policy.Conditions, options); err != nil {
+	if err := checkPostPolicyConditions(form, policy.Conditions, options, true); err != nil {
 		return err
 	}
-	return checkPostPolicyConditions(form, policy.Conditions, options, true)
+	return enforcePostPolicyFields(form, policy.Conditions, options)
 }
 
 func (v *Verifier) VerifyPostPolicy(form url.Values, options VerifyOptions) (*Result, error) {

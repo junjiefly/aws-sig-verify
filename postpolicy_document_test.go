@@ -104,6 +104,18 @@ func TestPostPolicyCheckConditionsKeepsSignatureFieldsVersionSpecific(t *testing
 	}
 }
 
+func TestPostPolicyCheckConditionsRunsConditionsBeforeStrictFields(t *testing.T) {
+	document := `{"expiration":"2026-01-01T00:01:00Z","conditions":[{"key":"expected.png"}]}`
+	policy, err := ParsePostPolicyDocument([]byte(document))
+	if err != nil {
+		t.Fatalf("ParsePostPolicyDocument() error = %v", err)
+	}
+	form := url.Values{"key": {"other.png"}, "success_action_status": {"200"}}
+	if err := policy.CheckConditions(form, VerifyOptions{PostPolicyStrictFields: true}); !errors.Is(err, ErrPostPolicyConditionFailed) {
+		t.Fatalf("CheckConditions() error = %v, want ErrPostPolicyConditionFailed", err)
+	}
+}
+
 func TestVerifyV4PostPolicyStrictFields(t *testing.T) {
 	verifier := testVerifier(t)
 	document := `{"expiration":"2026-01-01T00:01:00Z","conditions":[{"key":"photo.png"}]}`
