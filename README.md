@@ -205,6 +205,8 @@ result, err := verifier.VerifyPostPolicy(formValues, awsverify.VerifyOptions{
 
 The policy document must carry an `expiration`, and every condition in it is
 checked against the posted form once the document's signature has been verified.
+The top-level `expiration` and `conditions` names are case-sensitive, as required
+by AWS S3.
 `content-length-range` can only be evaluated from the uploaded part's size, so
 pass it through `PostPolicyContentLength`; a policy that carries the condition
 while the caller supplies no size fails closed instead of skipping the check.
@@ -214,7 +216,8 @@ An operator this package does not implement returns
 For callers that stream the file after signature verification, decode the
 policy with `ParsePostPolicyDocument`, evaluate `content-length-range` with
 `PostPolicy.ContentLengthRange`, and later apply the signed conditions with
-`PostPolicy.CheckConditions`.
+`PostPolicy.CheckConditions`. If signature verification is not performed on
+that path, call `PostPolicy.CheckExpiration` before accepting the upload.
 
 Set `PostPolicyStrictFields` to enforce AWS S3's rule that form fields other
 than the standard POST exceptions and `x-ignore-*` fields must be constrained

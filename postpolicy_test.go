@@ -319,6 +319,30 @@ func TestVerifyPostPolicyRequiresExpiration(t *testing.T) {
 	}
 }
 
+func TestParsePostPolicyRequiresCaseSensitiveTopLevelKeys(t *testing.T) {
+	tests := []string{
+		`{"EXPIRATION":"2026-01-01T00:01:00Z","conditions":[]}`,
+		`{"expiration":"2026-01-01T00:01:00Z","CONDITIONS":[]}`,
+	}
+	for _, document := range tests {
+		if _, err := ParsePostPolicyDocument([]byte(document)); !errors.Is(err, ErrMalformedPostPolicy) {
+			t.Fatalf("ParsePostPolicyDocument(%s) error = %v, want ErrMalformedPostPolicy", document, err)
+		}
+	}
+}
+
+func TestCheckConditionsRejectsDollarPrefixedObjectField(t *testing.T) {
+	document := `{"expiration":"2026-01-01T00:01:00Z","conditions":[{"$key":"photo.png"}]}`
+	policy, err := ParsePostPolicyDocument([]byte(document))
+	if err != nil {
+		t.Fatalf("ParsePostPolicyDocument() error = %v", err)
+	}
+	form := url.Values{"key": {"photo.png"}}
+	if err := policy.CheckConditions(form, VerifyOptions{}); !errors.Is(err, ErrMalformedPostPolicy) {
+		t.Fatalf("CheckConditions() error = %v, want ErrMalformedPostPolicy", err)
+	}
+}
+
 func TestVerifyPostPolicyConditionsRunAfterSignatureCheck(t *testing.T) {
 	verifier := testVerifier(t)
 	document := `{"expiration":"2026-01-01T00:01:00Z","conditions":[{"key":"photo.png"}]}`
@@ -351,6 +375,80 @@ func TestVerifyPostPolicyExpiryIsCheckedFirst(t *testing.T) {
 
 	if _, err := verifier.VerifyPostPolicy(form, VerifyOptions{}); !errors.Is(err, ErrExpiredSignature) {
 		t.Fatalf("error = %v, want ErrExpiredSignature", err)
+	}
+}
+
+func TestVerifyPostPolicyRejectsPolicyAtExactExpiration(t *testing.T) {
+	verifier := NewVerifier(Config{
+		Credentials: StaticCredentials(map[string]Credentials{testAccessKey: {AccessKeyID: testAccessKey, SecretAccessKey: testSecretKey}}),
+		Clock:       func() time.Time { return time.Date(2026, 1, 1, 0, 1, 0, 0, time.UTC) },
+	})
+	document := `{"expiration":"2026-01-01T00:01:00Z","conditions":[{"key":"photo.png"}]}`
+	encoded := base64.StdEncoding.EncodeToString([]byte(document))
+	form := url.Values{}
+	form.Set("AWSAccessKeyId", testAccessKey)
+	form.Set("policy", encoded)
+	form.Set("key", "photo.png")
+	form.Set("Signature", SignV2(testSecretKey, encoded))
+
+	if _, err := verifier.VerifyPostPolicy(form, VerifyOptions{}); !errors.Is(err, ErrExpiredSignature) {
+		t.Fatalf("error = %v, want ErrExpiredSignature", err)
+	}
+}
+
+func TestCheckExpirationRejectsExactExpiration(t *testing.T) {
+	policy, err := ParsePostPolicyDocument([]byte(`{"expiration":"2026-01-01T00:01:00Z","conditions":[]}`))
+	if err != nil {
+		t.Fatalf("ParsePostPolicyDocument() error = %v", err)
+	}
+	if err := policy.CheckExpiration(time.Date(2026, 1, 1, 0, 0, 59, 999999999, time.UTC)); err != nil {
+		t.Fatalf("CheckExpiration() error = %v, want nil", err)
+	}
+	if err := policy.CheckExpiration(time.Date(2026, 1, 1, 0, 1, 0, 0, time.UTC)); !errors.Is(err, ErrExpiredSignature) {
+		t.Fatalf("CheckExpiration() error = %v, want ErrExpiredSignature", err)
+	}
+}
+
+func TestPostPolicyContentLengthRangeAcceptsStringIntegers(t *testing.T) {
+	document := `{"expiration":"2026-01-01T00:01:00Z","conditions":[["content-length-range","100","1024"]]}`
+	policy, err := ParsePostPolicyDocument([]byte(document))
+	if err != nil {
+		t.Fatalf("ParsePostPolicyDocument() error = %v", err)
+	}
+	lengthRange, err := policy.ContentLengthRange()
+	if err != nil {
+		t.Fatalf("ContentLengthRange() error = %v", err)
+	}
+	if !lengthRange.Valid || lengthRange.Min != 100 || lengthRange.Max != 1024 {
+		t.Fatalf("unexpected content length range: %+v", lengthRange)
+	}
+}
+
+func TestPostPolicyContentLengthRangeKeepsSignedNonNegativeValidation(t *testing.T) {
+	document := `{"expiration":"2026-01-01T00:01:00Z","conditions":[["content-length-range",-1,-10]]}`
+	policy, err := ParsePostPolicyDocument([]byte(document))
+	if err != nil {
+		t.Fatalf("ParsePostPolicyDocument() error = %v", err)
+	}
+	lengthRange, err := policy.ContentLengthRange()
+	if err != nil {
+		t.Fatalf("ContentLengthRange() error = %v", err)
+	}
+	if !lengthRange.Valid || lengthRange.Min != -1 || lengthRange.Max != -10 {
+		t.Fatalf("unexpected content length range: %+v", lengthRange)
+	}
+
+	verifier := NewVerifier(Config{
+		Credentials: StaticCredentials(map[string]Credentials{testAccessKey: {AccessKeyID: testAccessKey, SecretAccessKey: testSecretKey}}),
+		Clock:       func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) },
+	})
+	encoded := base64.StdEncoding.EncodeToString([]byte(document))
+	form := url.Values{}
+	form.Set("AWSAccessKeyId", testAccessKey)
+	form.Set("policy", encoded)
+	form.Set("Signature", SignV2(testSecretKey, encoded))
+	if _, err := verifier.VerifyPostPolicy(form, VerifyOptions{}); !errors.Is(err, ErrMalformedPostPolicy) {
+		t.Fatalf("VerifyPostPolicy() error = %v, want ErrMalformedPostPolicy", err)
 	}
 }
 

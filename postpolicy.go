@@ -68,6 +68,16 @@ func ParsePostPolicyDocument(raw []byte) (*PostPolicy, error) {
 	if err := rejectDuplicateJSONKeys(raw); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrMalformedPostPolicy, err)
 	}
+	var rawDocument map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &rawDocument); err != nil {
+		return nil, fmt.Errorf("%w: invalid JSON", ErrMalformedPostPolicy)
+	}
+	if _, found := rawDocument["expiration"]; !found {
+		return nil, fmt.Errorf("%w: policy has no expiration", ErrMalformedPostPolicy)
+	}
+	if _, found := rawDocument["conditions"]; !found {
+		return nil, fmt.Errorf("%w: policy has no conditions", ErrMalformedPostPolicy)
+	}
 	var document struct {
 		Expiration string            `json:"expiration"`
 		Conditions []json.RawMessage `json:"conditions"`
@@ -143,6 +153,19 @@ func (policy *PostPolicy) CheckConditions(form url.Values, options VerifyOptions
 		return err
 	}
 	return enforcePostPolicyFields(form, policy.Conditions, options)
+}
+
+// CheckExpiration reports whether the POST policy is still valid at now. AWS
+// treats expiration as inclusive: a policy is expired once now equals or
+// follows the configured expiration time.
+func (policy *PostPolicy) CheckExpiration(now time.Time) error {
+	if policy == nil {
+		return ErrMalformedPostPolicy
+	}
+	if !policy.Expiration.After(now) {
+		return ErrExpiredSignature
+	}
+	return nil
 }
 
 func (v *Verifier) VerifyPostPolicy(form url.Values, options VerifyOptions) (*Result, error) {
@@ -226,7 +249,7 @@ func (v *Verifier) verifyPostPolicySignature(form url.Values, options VerifyOpti
 	if err != nil {
 		return nil, nil, err
 	}
-	if v.clock().After(parsedPolicy.Expiration) {
+	if !parsedPolicy.Expiration.After(v.clock()) {
 		return nil, nil, ErrExpiredSignature
 	}
 	if form.Get("x-amz-algorithm") != "" || form.Has("x-amz-credential") {
@@ -352,7 +375,7 @@ func enforcePostPolicyFields(form url.Values, conditions []json.RawMessage, opti
 				continue
 			}
 			for name := range fields {
-				referenced[strings.ToLower(strings.TrimPrefix(name, "$"))] = struct{}{}
+				referenced[strings.ToLower(name)] = struct{}{}
 			}
 			continue
 		}
@@ -572,6 +595,9 @@ func checkPostPolicyCondition(form url.Values, condition json.RawMessage, option
 		if err != nil {
 			return err
 		}
+		if minSize < 0 || maxSize < 0 || minSize > maxSize || maxSize == 0 {
+			return fmt.Errorf("%w: invalid content-length-range %d-%d", ErrMalformedPostPolicy, minSize, maxSize)
+		}
 		if options.PostPolicyContentLength == nil {
 			return fmt.Errorf("%w: content-length-range needs VerifyOptions.PostPolicyContentLength",
 				ErrUnsupportedPostPolicyCondition)
@@ -599,6 +625,9 @@ func checkExactMatchCondition(form url.Values, condition json.RawMessage, option
 	}
 	names := make([]string, 0, len(fields))
 	for name := range fields {
+		if strings.HasPrefix(name, "$") {
+			return fmt.Errorf("%w: object condition field %q must not start with \"$\"", ErrMalformedPostPolicy, name)
+		}
 		names = append(names, name)
 	}
 	// Sorted so the reported condition does not depend on map iteration order.
@@ -724,12 +753,25 @@ func postPolicyConditionStrings(raw json.RawMessage) ([]string, error) {
 }
 
 func postPolicyConditionSize(raw json.RawMessage) (int64, error) {
-	size, err := strconv.ParseInt(string(bytes.TrimSpace(raw)), 10, 64)
+	var value any
+	decoder := json.NewDecoder(bytes.NewReader(bytes.TrimSpace(raw)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
+		trimmed := bytes.TrimSpace(raw)
+		return 0, fmt.Errorf("%w: condition size %q is not an integer", ErrMalformedPostPolicy, trimmed)
+	}
+	var size int64
+	var err error
+	switch number := value.(type) {
+	case json.Number:
+		size, err = number.Int64()
+	case string:
+		size, err = strconv.ParseInt(number, 10, 64)
+	default:
+		err = strconv.ErrSyntax
+	}
 	if err != nil {
 		return 0, fmt.Errorf("%w: condition size %q is not an integer", ErrMalformedPostPolicy, bytes.TrimSpace(raw))
-	}
-	if size < 0 {
-		return 0, fmt.Errorf("%w: condition size is negative", ErrMalformedPostPolicy)
 	}
 	return size, nil
 }
