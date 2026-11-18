@@ -419,8 +419,8 @@ func TestV4PresignedCompatibility(t *testing.T) {
 		signingTime time.Time
 		want        error
 	}{
-		{name: "invalid expires", scope: "20260101/us-east-1/s3/aws4_request", expires: "bad", signingTime: testTime, want: ErrMalformedAuthorization},
-		{name: "zero expires", scope: "20260101/us-east-1/s3/aws4_request", expires: "0", signingTime: testTime, want: ErrMalformedAuthorization},
+		{name: "invalid expires", scope: "20260101/us-east-1/s3/aws4_request", expires: "bad", signingTime: testTime, want: ErrInvalidPresignExpiry},
+		{name: "zero expires", scope: "20260101/us-east-1/s3/aws4_request", expires: "0", signingTime: testTime, want: ErrInvalidPresignExpiry},
 		{name: "expires too long", scope: "20260101/us-east-1/s3/aws4_request", expires: "604801", signingTime: testTime, want: ErrPresignExpiryTooLong},
 		{name: "region mismatch", scope: "20260101/eu-west-1/s3/aws4_request", expires: "300", signingTime: testTime, want: ErrMalformedCredential},
 		{name: "future signing time", scope: "20260101/us-east-1/s3/aws4_request", expires: "300", signingTime: testTime.Add(16 * time.Minute), want: ErrClockSkew},

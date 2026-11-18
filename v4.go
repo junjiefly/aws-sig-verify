@@ -160,8 +160,8 @@ func (v *Verifier) verifyV4Presigned(req *http.Request, query url.Values, option
 		return nil, fmt.Errorf("%w: missing X-Amz-Expires", ErrMalformedAuthorization)
 	}
 	expiresSeconds, err := strconv.ParseInt(rawExpires, 10, 64)
-	if err != nil || expiresSeconds < 1 {
-		return nil, fmt.Errorf("%w: invalid X-Amz-Expires", ErrMalformedAuthorization)
+	if err != nil || expiresSeconds <= 0 {
+		return nil, fmt.Errorf("%w: invalid X-Amz-Expires", ErrInvalidPresignExpiry)
 	}
 	if expiresSeconds > int64(v.maxPresignExpiry/time.Second) {
 		return nil, ErrPresignExpiryTooLong
@@ -323,6 +323,9 @@ func v4HeaderSigningTime(req *http.Request) (time.Time, error) {
 func parseV4Time(value string) (time.Time, error) {
 	value = strings.TrimSpace(value)
 	if parsed, err := time.Parse("20060102T150405Z", value); err == nil {
+		return parsed.UTC(), nil
+	}
+	if parsed, err := time.Parse(time.RFC1123Z, value); err == nil {
 		return parsed.UTC(), nil
 	}
 	if parsed, err := http.ParseTime(value); err == nil {

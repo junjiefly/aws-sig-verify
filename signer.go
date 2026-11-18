@@ -206,11 +206,13 @@ func checkSigningTime(signingTime time.Time, now time.Time, maxSkew time.Duratio
 	if signingTime.IsZero() {
 		return ErrMalformedAuthorization
 	}
-	offset := now.Sub(signingTime)
-	if offset < 0 {
-		offset = -offset
+	if signingTime.Before(time.Unix(0, 0)) {
+		return fmt.Errorf("%w: signing time %s", ErrTimeBeforeEpoch, signingTime.Format(time.RFC3339))
 	}
-	if offset > maxSkew {
+	// time.Duration cannot represent multi-century differences. Avoid the
+	// overflow, which can wrap an extreme future date back into the skew
+	// window.
+	if signingTime.Before(now.Add(-maxSkew)) || signingTime.After(now.Add(maxSkew)) {
 		return fmt.Errorf("%w: signing time %s", ErrClockSkew, signingTime.Format(time.RFC3339))
 	}
 	return nil

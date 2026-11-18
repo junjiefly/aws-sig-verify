@@ -218,7 +218,7 @@ func TestV2HeaderDateHandling(t *testing.T) {
 
 	request = build("", "not-a-date")
 	request.Header.Set("Authorization", "AWS "+testAccessKey+":"+base64SHA1(testSecretKey, "x"))
-	if _, err := verifier.Verify(request, options); !errors.Is(err, ErrMalformedAuthorization) {
+	if _, err := verifier.Verify(request, options); !errors.Is(err, ErrInvalidSigningTime) {
 		t.Fatalf("invalid X-Amz-Date error = %v", err)
 	}
 }

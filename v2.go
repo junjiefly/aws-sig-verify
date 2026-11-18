@@ -106,6 +106,10 @@ func (v *Verifier) verifyV2Header(req *http.Request, options VerifyOptions) (*Re
 		return nil, ErrMalformedSignature
 	}
 
+	amzDateHeaders := req.Header.Values("X-Amz-Date")
+	if len(amzDateHeaders) > 0 && strings.TrimSpace(amzDateHeaders[0]) == "" {
+		return nil, ErrInvalidSigningTime
+	}
 	amzDate := req.Header.Get("X-Amz-Date")
 	if amzDate == "" && req.Header.Get("Date") == "" {
 		return nil, fmt.Errorf("%w: missing Date", ErrMalformedAuthorization)
@@ -114,7 +118,7 @@ func (v *Verifier) verifyV2Header(req *http.Request, options VerifyOptions) (*Re
 	if amzDate != "" {
 		parsed, err := parseV4Time(amzDate)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: invalid X-Amz-Date", ErrInvalidSigningTime)
 		}
 		signingTime = parsed
 		if err := checkSigningTime(signingTime, v.clock().UTC(), v.maxSkew); err != nil {
@@ -123,7 +127,7 @@ func (v *Verifier) verifyV2Header(req *http.Request, options VerifyOptions) (*Re
 	} else {
 		parsed, err := parseHTTPDate(req.Header.Get("Date"))
 		if err != nil {
-			return nil, fmt.Errorf("%w: invalid Date", ErrMalformedAuthorization)
+			return nil, fmt.Errorf("%w: invalid Date", ErrInvalidSigningTime)
 		}
 		signingTime = parsed.UTC()
 		if err := checkSigningTime(signingTime, v.clock().UTC(), v.maxSkew); err != nil {
